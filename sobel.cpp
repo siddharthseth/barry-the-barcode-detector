@@ -25,8 +25,40 @@ int yGradient(Mat image, int x, int y)
                 image.at<uchar>(y+1, x+1);
 }
 
+float 2d_normal_pdf(int x, int y, float standard_deviation) 
+{
+    static const float inverted_2pi = 0.15915494309189535;
+    float exp = (x*x+y*y)/(2*standard_deviation*standard_deviation);
+    return inverted_2pi / (standard_deviation * standard_deviation)
+           * std::exp(-exp);
+}
+
+int blurr_filter_3 (Mat image, int x, int y, int standard_deviation)
+{
+    return 2d_normal_pdf(-1, -1, standard_deviation) * image.at<uchar>(y-1, x-1) +
+           2d_normal_pdf(-1, 0, standard_deviation) * image.at<uchar>(y, x-1) +
+           2d_normal_pdf(-1, 1, standard_deviation) * image.at<uchar>(y+1, x-1) +
+           2d_normal_pdf(0, -1, standard_deviation) * image.at<uchar>(y-1, x) +
+           2d_normal_pdf(0, 0, standard_deviation) * image.at<uchar>(y, x) +
+           2d_normal_pdf(0, 1, standard_deviation) * image.at<uchar>(y+1, x) +
+           2d_normal_pdf(1, -1, standard_deviation) * image.at<uchar>(y-1, x+1) +
+           2d_normal_pdf(1, 0, standard_deviation) * image.at<uchar>(y, x+1) +
+           2d_normal_pdf(1, 1, standard_deviation) * image.at<uchar>(y+1, x+1);
+}
+int blurr (Mat image, int x, int y, int filter_size, int standard_deviation)
+{
+    float sum = 0.f;
+    int i, j;
+    for (i = -filter_size; i <= filter_size; i++) {
+        for (j = -filter_size; j <= filter_size; j++) {
+          sum += 2d_normal_pdf(i, j, standard_deviation) * image.at<uchar>(y+j, x+i);
+        }
+    }
+    return int(sum);
+}
+
 // 1 for success, 0 for fail
-int grayscale(Mat src, Mat grey, Mat dst) {
+int grayscale(Mat &src, Mat &grey, Mat &dst) {
   double start, end;
   start = omp_get_wtime();
   int gx, gy, sum;
@@ -41,7 +73,11 @@ int grayscale(Mat src, Mat grey, Mat dst) {
   return 1;
 }
 
-int sobel(Mat grey, Mat dst) {
+/** 
+ *  Applies a Sobel filter to a greyscale image in GREY and writes the result values
+ *  to DST.
+ **/
+int sobel(Mat &grey, Mat &dst) {
   #pragma omp parallel for  
   for(int y = 0; y < grey.rows; y++)
     for(int x = 0; x < grey.cols; x++)
