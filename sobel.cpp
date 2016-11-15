@@ -27,7 +27,6 @@ int yGradient(Mat image, int x, int y)
 
 // 1 for success, 0 for fail
 int grayscale(Mat src, Mat grey, Mat dst) {
-  Mat src, grey, dst;
   double start, end;
   start = omp_get_wtime();
   int gx, gy, sum;
@@ -60,7 +59,22 @@ int sobel(Mat grey, Mat dst) {
   }
 }
 
-// Grayscales and runs sober operation
+// Takes greyscaled picture, thresholds it and puts it dst
+// In the python file, they use 225 for threshold_val and 255 for max_val
+int threshold(Mat *grey, Mat *dst, int threshold_val, int max_val) {
+  #pragma omp parallel for
+  for (int x = 0; x < grey.rows; x++) {
+    for (int y = 0; y < grey.cols; y++) {
+      if (grey.at<uchar>(y, x) >= threshold_val) {
+        dst.at<uchar>(y, x) = max_val;
+      } else {
+        dst.at<uchar>(y, x) = 0;
+      }
+    }
+  }
+}
+
+// Grayscales and runs sobel operation
 int main()
 {
   Mat src, grey, dst;
