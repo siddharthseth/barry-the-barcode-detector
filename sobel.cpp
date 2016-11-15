@@ -58,7 +58,7 @@ int blurr (Mat image, int x, int y, int filter_size, int standard_deviation)
 }
 
 // 1 for success, 0 for fail
-int grayscale(Mat * src, Mat * grey, Mat * dst) {
+int grayscale(Mat &src, Mat &grey, Mat &dst) {
   double start, end;
   start = omp_get_wtime();
   int gx, gy, sum;
@@ -77,7 +77,7 @@ int grayscale(Mat * src, Mat * grey, Mat * dst) {
  *  Applies a Sobel filter to a greyscale image in GREY and writes the result values
  *  to DST.
  **/
-int sobel(Mat * grey, Mat * dst) {
+int sobel(Mat &grey, Mat &dst) {
   #pragma omp parallel for  
   for(int y = 0; y < grey.rows; y++)
     for(int x = 0; x < grey.cols; x++)
@@ -103,10 +103,10 @@ int main()
   double start, end;
   start = omp_get_wtime();
 
-  if (!grayscale(&src, &grey, &dst)) {
+  if (!grayscale(src, grey, dst)) {
     return -1;
   }
-  sobel(&grey, &dst);
+  sobel(grey, dst);
 
   // For debugging purposes, can get rid of this once we're done with it
   namedWindow("sobel");
