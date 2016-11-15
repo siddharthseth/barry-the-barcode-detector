@@ -106,6 +106,47 @@ int sobel(Mat &grey, Mat &dst) {
   }
 }
 
+/**  @function Erosion
+  *  @Mat src -> source image Matrix
+  *  @Mat dst -> pointer to destination Matrix
+  *  @int erosion_elem -> 0 = rect, 1 = cross, 2 = ellipse
+  *  @int erosion_size -> represents size of erosion around anchor point
+  */
+void Erosion(Mat src, Mat& dst, int erosion_elem, int erosion_size)
+{
+  int erosion_type;
+  if( erosion_elem == 0 ){ erosion_type = MORPH_RECT; }
+  else if( erosion_elem == 1 ){ erosion_type = MORPH_CROSS; }
+  else if( erosion_elem == 2) { erosion_type = MORPH_ELLIPSE; }
+
+  Mat element = getStructuringElement( erosion_type,
+                                       Size( 2*erosion_size + 1, 2*erosion_size+1 ),
+                                       Point( erosion_size, erosion_size ) );
+
+  /// Apply the erosion operation
+  erode( src, dst, element );
+}
+
+/** @function Dilation 
+  * @Mat src -> source image Matrix
+  * @Mat dst -> pointer to destination Matrix
+  * @int dilation_elem -> 0 = rect, 1 = cross, 2 = ellipse
+  * @int dilation_size -> represents size of dilation around anchor point
+  */
+void Dilation(Mat src, Mat& dst, int dilation_elem, int dilation_size)
+{
+  int dilation_type;
+  if( dilation_elem == 0 ){ dilation_type = MORPH_RECT; }
+  else if( dilation_elem == 1 ){ dilation_type = MORPH_CROSS; }
+  else if( dilation_elem == 2) { dilation_type = MORPH_ELLIPSE; }
+
+  Mat element = getStructuringElement( dilation_type,
+                                       Size( 2*dilation_size + 1, 2*dilation_size+1 ),
+                                       Point( dilation_size, dilation_size ) );
+  /// Apply the dilation operation
+  dilate( src, dst, element );
+}
+
 // Grayscales and runs sober operation
 int main()
 {
