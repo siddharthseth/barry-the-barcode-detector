@@ -74,7 +74,7 @@ int grayscale(Mat &src, Mat &grey, Mat &dst) {
   start = omp_get_wtime();
   int gx, gy, sum;
   // TODO: replace this so it reads the specific image rather than a hardcoded one
-  src= imread("E:/image.jpg");  
+  src= imread("kurt.jpg");  
   cvtColor(src,grey,CV_BGR2GRAY);
   dst = grey.clone();
   if( !grey.data )
