@@ -106,6 +106,22 @@ int sobel(Mat &grey, Mat &dst) {
   }
 }
 
+// Takes greyscaled picture, thresholds it and puts it dst
+// In the python file, they use 225 for threshold_val and 255 for max_val
+int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
+  #pragma omp parallel for
+  for (int y = 0; y < grey.rows; y++) {
+    for (int x = 0; x < grey.cols; x++) {
+      if (grey.at<uchar>(y, x) >= threshold_val) {
+        dst.at<uchar>(y, x) = max_val;
+      } else {
+        dst.at<uchar>(y, x) = 0;
+      }
+    }
+  }
+}
+
+// Grayscales and runs sobel operation
 /**  @function Erosion
   *  @Mat src -> source image Matrix
   *  @Mat dst -> pointer to destination Matrix
