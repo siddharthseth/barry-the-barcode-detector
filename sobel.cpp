@@ -68,17 +68,19 @@ int blurr (Mat image, int x, int y, int filter_size, float standard_deviation)
     return int(sum);
 }
 
-int blurr_image (Mat &image, Mat &dst)
+int blurr_image (Mat &image, Mat &dst, int filter_size)
 {
     #pragma omp parallel for
     for (int y = 0; y < dst.rows; y++)
         for (int x = 0; x < dst.rows; x++)
             dst.at<uchar>(y, x) = 0;
     #pragma omp parallel for
-    for (int y = 4; y < image.rows - 4; y++) 
-        for (int x = 4; x < image.cols - 4; x++)
+    for (int y = filter_size; y < image.rows - filter_size; y++) 
+        for (int x = filter_size; x < image.cols - filter_size; x++)
         {
-            int blurred = blurr (image, x, y, 4, 1.0f);
+            int blurred = blurr (image, x, y, filter_size, 1.0f);
+            blurred = blurred > 255 ? 255 : blurred;
+            blurred = blurred < 0 ? 0 : blurred;
             dst.at<uchar>(y, x) = blurred;
         }
 }
@@ -124,9 +126,14 @@ int sobel(Mat &grey, Mat &dst) {
 // Takes greyscaled picture, thresholds it and puts it dst
 // In the python file, they use 225 for threshold_val and 255 for max_val
 int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
+  #pragma omp parallel for  
+  for(int y = 0; y < grey.rows; y++)
+    for(int x = 0; x < grey.cols; x++)
+      dst.at<uchar>(y,x) = 0;  
   #pragma omp parallel for
-  for (int y = 0; y < grey.rows; y++) {
-    for (int x = 0; x < grey.cols; x++) {
+  for (int y = 0; y < grey.rows-1; y++) {
+    for (int x = 0; x < grey.cols-1; x++) {
+      // cout << "Thresholding at: " << x << ", " << y << "\n";
       if (grey.at<uchar>(y, x) >= threshold_val) {
         dst.at<uchar>(y, x) = max_val;
       } else {
@@ -134,6 +141,7 @@ int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
       }
     }
   }
+  cout << "Done thresholding\n";
 }
 
 // Grayscales and runs sobel operation
@@ -181,7 +189,8 @@ void Dilation(Mat src, Mat& dst, int dilation_elem, int dilation_size)
 // Grayscales and runs sober operation
 int main()
 {
-  Mat src, grey, dst, blurred, blurred_again;
+  Mat src, grey, dst, blurred, blurred_again, thresholded, thresholded2, eroded,
+      eroded2, dilated, dilated2, edge2;
 
   double start, end;
   start = omp_get_wtime();
@@ -192,14 +201,28 @@ int main()
   sobel(grey, dst);
   blurred = dst.clone();
   blurred_again = dst.clone();
+  thresholded = dst.clone();
+  thresholded2 = dst.clone();
+  dilated = dst.clone();
+  dilated2 = dst.clone();
+  eroded = dst.clone();
+  edge2 = dst.clone();
 
-  blurr_image (dst, blurred);
-  blurr_image (dst, blurred_again);
+  blurr_image (dst, blurred, 4);
+  threshold(blurred, thresholded, 210, 255);
+  blurr_image(thresholded, eroded, 4);
+  threshold(eroded, thresholded2, 150, 255);
+  Dilation(thresholded2, dilated, 0, 10);
+  Dilation(dilated, dilated2, 0, 10);
   // For debugging purposes, can get rid of this once we're done with it
-  namedWindow("sobel");
-  imshow("sobel", dst);
-  namedWindow("blurred_again");
-  imshow("blurred_again", blurred_again);
+  // namedWindow("sobel");
+  // imshow("sobel", dst);
+  // namedWindow("blurred");
+  // imshow("blurred", blurred);
+  namedWindow("thresholded2");
+  imshow("thresholded2", thresholded2);
+  namedWindow("dilated");
+  imshow("dilated", dilated);
   // namedWindow("grayscale");
   // imshow("grayscale", grey);
   namedWindow("Original");
