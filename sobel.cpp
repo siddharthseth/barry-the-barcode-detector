@@ -25,7 +25,10 @@ int yGradient(Mat image, int x, int y)
                 image.at<uchar>(y+1, x+1);
 }
 
-float 2d_normal_pdf(int x, int y, float standard_deviation) 
+/**
+  * Calculates the 2d zero-mean gaussian with the given x, y and standard deviation.
+ **/
+float normal_pdf_2d(int x, int y, float standard_deviation) 
 {
     static const float inverted_2pi = 0.15915494309189535;
     float exp = (x*x+y*y)/(2*standard_deviation*standard_deviation);
@@ -33,25 +36,33 @@ float 2d_normal_pdf(int x, int y, float standard_deviation)
            * std::exp(-exp);
 }
 
+/**
+  * Applies a hard coded blurr with filter size 3 at the given x and y in IMAGE.
+  * Returns the blurred value to place at x, y im IMAGE.
+ **/
 int blurr_filter_3 (Mat image, int x, int y, int standard_deviation)
 {
-    return 2d_normal_pdf(-1, -1, standard_deviation) * image.at<uchar>(y-1, x-1) +
-           2d_normal_pdf(-1, 0, standard_deviation) * image.at<uchar>(y, x-1) +
-           2d_normal_pdf(-1, 1, standard_deviation) * image.at<uchar>(y+1, x-1) +
-           2d_normal_pdf(0, -1, standard_deviation) * image.at<uchar>(y-1, x) +
-           2d_normal_pdf(0, 0, standard_deviation) * image.at<uchar>(y, x) +
-           2d_normal_pdf(0, 1, standard_deviation) * image.at<uchar>(y+1, x) +
-           2d_normal_pdf(1, -1, standard_deviation) * image.at<uchar>(y-1, x+1) +
-           2d_normal_pdf(1, 0, standard_deviation) * image.at<uchar>(y, x+1) +
-           2d_normal_pdf(1, 1, standard_deviation) * image.at<uchar>(y+1, x+1);
+    return normal_pdf_2d(-1, -1, standard_deviation) * image.at<uchar>(y-1, x-1) +
+           normal_pdf_2d(-1, 0, standard_deviation) * image.at<uchar>(y, x-1) +
+           normal_pdf_2d(-1, 1, standard_deviation) * image.at<uchar>(y+1, x-1) +
+           normal_pdf_2d(0, -1, standard_deviation) * image.at<uchar>(y-1, x) +
+           normal_pdf_2d(0, 0, standard_deviation) * image.at<uchar>(y, x) +
+           normal_pdf_2d(0, 1, standard_deviation) * image.at<uchar>(y+1, x) +
+           normal_pdf_2d(1, -1, standard_deviation) * image.at<uchar>(y-1, x+1) +
+           normal_pdf_2d(1, 0, standard_deviation) * image.at<uchar>(y, x+1) +
+           normal_pdf_2d(1, 1, standard_deviation) * image.at<uchar>(y+1, x+1);
 }
+
+/**
+  * Generalized blurr with the given filter size and standard deviation.
+ **/
 int blurr (Mat image, int x, int y, int filter_size, int standard_deviation)
 {
     float sum = 0.f;
     int i, j;
     for (i = -filter_size; i <= filter_size; i++) {
         for (j = -filter_size; j <= filter_size; j++) {
-          sum += 2d_normal_pdf(i, j, standard_deviation) * image.at<uchar>(y+j, x+i);
+          sum += normal_pdf_2d(i, j, standard_deviation) * image.at<uchar>(y+j, x+i);
         }
     }
     return int(sum);
