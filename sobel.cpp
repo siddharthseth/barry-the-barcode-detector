@@ -2,8 +2,6 @@
 #include<iostream>
 #include<omp.h>
 #include<cmath>
-#include <boost/random.hpp>
-#include <boost/random/normal_distribution.hpp>
 #include<opencv2/imgproc/imgproc.hpp>
 #include<opencv2/highgui/highgui.hpp>
 using namespace std;
