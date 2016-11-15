@@ -40,7 +40,7 @@ float normal_pdf_2d(int x, int y, float standard_deviation)
   * Applies a hard coded blurr with filter size 3 at the given x and y in IMAGE.
   * Returns the blurred value to place at x, y im IMAGE.
  **/
-int blurr_filter_3 (Mat image, int x, int y, int standard_deviation)
+int blurr_filter_3 (Mat image, int x, int y, float standard_deviation)
 {
     return normal_pdf_2d(-1, -1, standard_deviation) * image.at<uchar>(y-1, x-1) +
            normal_pdf_2d(-1, 0, standard_deviation) * image.at<uchar>(y, x-1) +
@@ -56,7 +56,7 @@ int blurr_filter_3 (Mat image, int x, int y, int standard_deviation)
 /**
   * Generalized blurr with the given filter size and standard deviation.
  **/
-int blurr (Mat image, int x, int y, int filter_size, int standard_deviation)
+int blurr (Mat image, int x, int y, int filter_size, float standard_deviation)
 {
     float sum = 0.f;
     int i, j;
@@ -68,13 +68,28 @@ int blurr (Mat image, int x, int y, int filter_size, int standard_deviation)
     return int(sum);
 }
 
+int blurr_image (Mat &image, Mat &dst)
+{
+    #pragma omp parallel for
+    for (int y = 0; y < dst.rows; y++)
+        for (int x = 0; x < dst.rows; x++)
+            dst.at<uchar>(y, x) = 0;
+    #pragma omp parallel for
+    for (int y = 4; y < image.rows - 4; y++) 
+        for (int x = 4; x < image.cols - 4; x++)
+        {
+            int blurred = blurr (image, x, y, 4, 1.0f);
+            dst.at<uchar>(y, x) = blurred;
+        }
+}
+
 // 1 for success, 0 for fail
 int grayscale(Mat &src, Mat &grey, Mat &dst) {
   double start, end;
   start = omp_get_wtime();
   int gx, gy, sum;
   // TODO: replace this so it reads the specific image rather than a hardcoded one
-  src= imread("kurt.jpg");  
+  src= imread("example.png");  
   cvtColor(src,grey,CV_BGR2GRAY);
   dst = grey.clone();
   if( !grey.data )
@@ -98,7 +113,7 @@ int sobel(Mat &grey, Mat &dst) {
     for(int x = 1; x < grey.cols - 1; x++){
       int gx = xGradient(grey, x, y);
       int gy = yGradient(grey, x, y);
-      int sum = abs(gx) + abs(gy);
+      int sum = abs(gx) - abs(gy);
       sum = sum > 255 ? 255:sum;
       sum = sum < 0 ? 0 : sum;
       dst.at<uchar>(y,x) = sum;
@@ -150,7 +165,7 @@ void Dilation(Mat src, Mat& dst, int dilation_elem, int dilation_size)
 // Grayscales and runs sober operation
 int main()
 {
-  Mat src, grey, dst;
+  Mat src, grey, dst, blurred, blurred_again;
 
   double start, end;
   start = omp_get_wtime();
@@ -159,12 +174,18 @@ int main()
     return -1;
   }
   sobel(grey, dst);
+  blurred = dst.clone();
+  blurred_again = dst.clone();
 
+  blurr_image (dst, blurred);
+  blurr_image (dst, blurred_again);
   // For debugging purposes, can get rid of this once we're done with it
   namedWindow("sobel");
   imshow("sobel", dst);
-  namedWindow("grayscale");
-  imshow("grayscale", grey);
+  namedWindow("blurred_again");
+  imshow("blurred_again", blurred_again);
+  // namedWindow("grayscale");
+  // imshow("grayscale", grey);
   namedWindow("Original");
   imshow("Original", src);
   end = omp_get_wtime();
