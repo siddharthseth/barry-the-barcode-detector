@@ -161,7 +161,6 @@ int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
       }
     }
   }
-  // cout << "Done thresholding\n";
 }
 
 // Grayscales and runs sobel operation
