@@ -70,15 +70,15 @@ int blurr (Mat image, int x, int y, int filter_size, float standard_deviation)
     return int(sum);
 }
 
-int blurr_image (Mat &image, Mat &dst, int filter_size)
+int blurr_image (Mat &image, Mat &dst, int filter_size, int margin)
 {
     #pragma omp parallel for
     for (int y = 0; y < dst.rows; y++)
-        for (int x = 0; x < dst.rows; x++)
+        for (int x = 0; x < dst.cols; x++)
             dst.at<uchar>(y, x) = 0;
     #pragma omp parallel for
-    for (int y = filter_size; y < image.rows - filter_size; y++) 
-        for (int x = filter_size; x < image.cols - filter_size; x++)
+    for (int y = filter_size + margin; y < image.rows - filter_size - margin; y++) 
+        for (int x = filter_size + margin; x < image.cols - filter_size - margin; x++)
         {
             int blurred = blurr (image, x, y, filter_size, 1.0f);
             blurred = blurred > 255 ? 255 : blurred;
@@ -117,7 +117,7 @@ int sobel(Mat &grey, Mat &dst) {
     for(int x = 1; x < grey.cols - 1; x++){
       int gx = xGradient(grey, x, y);
       int gy = yGradient(grey, x, y);
-      int sum = abs(gx) + abs(gy);
+      int sum = abs(gx) - abs(gy);
       sum = sum > 255 ? 255:sum;
       sum = sum < 0 ? 0 : sum;
       dst.at<uchar>(y,x) = sum;
@@ -125,7 +125,7 @@ int sobel(Mat &grey, Mat &dst) {
   }
 }
 
-int sobel2(Mat &grey, Mat &dst) {
+int sobel_add(Mat &grey, Mat &dst) {
   #pragma omp parallel for  
   for(int y = 0; y < grey.rows; y++)
     for(int x = 0; x < grey.cols; x++)
@@ -135,7 +135,7 @@ int sobel2(Mat &grey, Mat &dst) {
     for(int x = 1; x < grey.cols - 1; x++){
       int gx = xGradient(grey, x, y);
       int gy = yGradient(grey, x, y);
-      int sum = abs(gy) + abs(gx);
+      int sum = abs(gy)*abs(gy) + abs(gx)*abs(gx);
       sum = sum > 255 ? 255:sum;
       sum = sum < 0 ? 0 : sum;
       dst.at<uchar>(y,x) = sum;
@@ -161,7 +161,7 @@ int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
       }
     }
   }
-  cout << "Done thresholding\n";
+  // cout << "Done thresholding\n";
 }
 
 // Grayscales and runs sobel operation
@@ -215,19 +215,31 @@ void multByElem(Mat& in1, Mat& in2, Mat& result){
   }
 }
 
-void argMaxX(Mat in, int *results) 
+void argMaxX(Mat in, int (&results)[2], int threshold) 
 {
   results[0] = 0;
   results[1] = 0;
   int sums[in.rows];
   int maxIndex = 0;
   int secondMaxIndex = 0;
+  #pragma omp for
+  for (int y = 0; y < in.rows; y++)
+    sums[y] = 0;
+  #pragma omp for
   for (int y = 0; y < in.rows; y++)
         for (int x = 0; x < in.cols; x++)
-            sums[y] += in.at<uchar>(y, x);
+            if (in.at<uchar>(y, x) > threshold) {
+              sums[y] += 1;
+            }
+            // sums[y] += in.at<uchar>(y, x);
+            // sums[y] += 1;
 
+  #pragma omp for
   for (int z = 0; z < in.rows; z++) {
+    if (abs(z - maxIndex) <= 5 || abs(z - secondMaxIndex) <= 5)
+      continue;
     if (sums[z] > results[1]) {
+      #pragma omp critical
       if (sums[z] > results[0]) {
         results[1] = results[0];
         results[0] = sums[z];
@@ -243,19 +255,33 @@ void argMaxX(Mat in, int *results)
   results[1] = secondMaxIndex;
 }
 
-void argMaxY(Mat in, int *results) 
+void argMaxY(Mat in, int (&results)[2], int threshold)
 {
   results[0] = 0;
   results[1] = 0;
   int sums[in.cols];
   int maxIndex = 0;
   int secondMaxIndex = 0;
+  #pragma omp for
   for (int x = 0; x < in.cols; x++)
-    for (int y = 0; y < in.rows; y++)
-        sums[x] += in.at<uchar>(y, x);
+    sums[x] = 0;
+  #pragma omp for
+  for (int x = 0; x < in.cols; x++)
+    for (int y = 0; y < in.rows; y++){
+      if (in.at<uchar>(y, x) > threshold) {
+        sums[x] += 1;
+      }
+      // sums[x] += in.at<uchar>(y, x);
+      // cout << (int)in.at<uchar>(y, x) << "\n";
+      // sums[x] += 1;
+    }
 
+  #pragma omp for
   for (int z = 0; z < in.cols; z++) {
+    if (abs(z - maxIndex) <= 5 || abs(z - secondMaxIndex) <= 5)
+      continue;
     if (sums[z] > results[1]) {
+      #pragma omp critical
       if (sums[z] > results[0]) {
         results[1] = results[0];
         results[0] = sums[z];
@@ -309,16 +335,19 @@ int main()
   sobel4 = grey.clone();
   Mat temp = grey.clone();
 
-  blurr_image(grey, blur1, 3);
+  blurr_image(grey, blur1, 3, 0);
   sobel(blur1, temp);
   threshold(temp, sobel1, 225, 255);\
 
-  blurr_image(blur1, blur2, 3);
+  blurr_image(blur1, blur2, 9, 3);
   sobel(blur2, temp);
   threshold(temp, sobel2, 225, 255);
 
-  blurr_image(sobel2, temp, 3);
+  blurr_image(sobel2, temp, 3, 12);
   threshold(temp, sobel2, 150, 255);
+
+  // namedWindow("sobel2");
+  // imshow("sobel2", sobel2);
 
   blurred = dst.clone();
   blurred_again = dst.clone();
@@ -335,41 +364,41 @@ int main()
   // blurr_image(thresholded, blurred, 5);
   // threshold(blurred, thresholded, 210, 255);
 
-  Erosion(sobel2, temp, 1, 1);
+  // Erosion(sobel2, temp, 0, 1);
 
   // namedWindow("eroded");
   // imshow("eroded", temp);
 
-  Dilation(temp, dilated, 0, 10);
+  Dilation(sobel2, dilated, 0, 10);
   Dilation(dilated, dilated2, 0, 10);
-  Dilation(dilated2, dilated, 0, 10);
+  // Dilation(dilated2, dilated, 0, 10);
   // Dilation(dilated, dilated2, 0, 1);
 
-  namedWindow("dilated");
-  imshow("dilated", dilated);
+  // namedWindow("dilated");
+  // imshow("dilated", dilated2);
 
-  sobel(dilated, temp);
-  blurr_image(temp, dst, 4);
+  sobel_add(dilated2, temp);
+  blurr_image(temp, dst, 15, 15);
 
-  namedWindow("sobel");
-  imshow("sobel", dst);
+  // namedWindow("sobel");
+  // imshow("sobel", dst);
 
   int vertical[2];
   int horizontal[2];
 
-  argMaxX(dst, horizontal);
-  argMaxY(dst, vertical);
+  argMaxX(dst, horizontal, 100);
+  argMaxY(dst, vertical, 100);
+  imshow("Original", src);
+  end = omp_get_wtime();
 
   cout << vertical[0] << " " << vertical[1] << endl;
   cout << horizontal[0] << " " << horizontal[1] << endl;
 
-  drawLines(dst, temp, horizontal, vertical);
+  drawLines(dst, temp, vertical, horizontal);
   namedWindow("final");
   imshow("final", temp);
 
   namedWindow("Original");
-  imshow("Original", src);
-  end = omp_get_wtime();
   cout<<"time is: "<<(end-start)<< " seconds" <<endl;
   waitKey();
   return 0;
