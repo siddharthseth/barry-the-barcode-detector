@@ -302,9 +302,12 @@ void drawLines(Mat in, Mat &out, int * xCoords, int * yCoords) {
   for (int y = 0; y < in.rows; y++) {
     for (int x = 0; x < in.cols; x++) {
       if (x == xCoords[0] || x == xCoords[1] || y == yCoords[0] || y == yCoords[1]){
-        out.at<uchar>(y, x) = 255;
-      } else {
-        out.at<uchar>(y, x) = 0;
+        // out.at<uchar>(y, x) = 0;
+        out.at<Vec3b>(y, x)[0] = 0;
+        out.at<Vec3b>(y, x)[1] = 0;
+        out.at<Vec3b>(y, x)[2] = 0;
+      // } else {
+        // out.at<uchar>(y, x) = 0;
       }
     }
   }
@@ -339,11 +342,11 @@ int main()
   sobel(blur1, temp);
   threshold(temp, sobel1, 225, 255);\
 
-  blurr_image(blur1, blur2, 9, 3);
+  blurr_image(blur1, blur2, 3, 3);
   sobel(blur2, temp);
   threshold(temp, sobel2, 225, 255);
 
-  blurr_image(sobel2, temp, 3, 12);
+  blurr_image(sobel2, temp, 3, 6);
   threshold(temp, sobel2, 150, 255);
 
   // namedWindow("sobel2");
@@ -378,7 +381,7 @@ int main()
   // imshow("dilated", dilated2);
 
   sobel_add(dilated2, temp);
-  blurr_image(temp, dst, 15, 15);
+  blurr_image(temp, dst, 5, 9);
 
   // namedWindow("sobel");
   // imshow("sobel", dst);
@@ -393,7 +396,7 @@ int main()
 
   cout << vertical[0] << " " << vertical[1] << endl;
   cout << horizontal[0] << " " << horizontal[1] << endl;
-
+  temp = src.clone();
   drawLines(dst, temp, vertical, horizontal);
   namedWindow("final");
   imshow("final", temp);
