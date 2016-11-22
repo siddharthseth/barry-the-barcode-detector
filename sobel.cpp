@@ -3,6 +3,8 @@
 #include <cmath>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
+#include <vector>
+#include <numeric>
 using namespace std;
 using namespace cv;
 
@@ -68,15 +70,15 @@ int blurr (Mat image, int x, int y, int filter_size, float standard_deviation)
     return int(sum);
 }
 
-int blurr_image (Mat &image, Mat &dst, int filter_size)
+int blurr_image (Mat &image, Mat &dst, int filter_size, int margin)
 {
     #pragma omp parallel for
     for (int y = 0; y < dst.rows; y++)
-        for (int x = 0; x < dst.rows; x++)
+        for (int x = 0; x < dst.cols; x++)
             dst.at<uchar>(y, x) = 0;
     #pragma omp parallel for
-    for (int y = filter_size; y < image.rows - filter_size; y++) 
-        for (int x = filter_size; x < image.cols - filter_size; x++)
+    for (int y = filter_size + margin; y < image.rows - filter_size - margin; y++) 
+        for (int x = filter_size + margin; x < image.cols - filter_size - margin; x++)
         {
             int blurred = blurr (image, x, y, filter_size, 1.0f);
             blurred = blurred > 255 ? 255 : blurred;
@@ -123,6 +125,24 @@ int sobel(Mat &grey, Mat &dst) {
   }
 }
 
+int sobel_add(Mat &grey, Mat &dst) {
+  #pragma omp parallel for  
+  for(int y = 0; y < grey.rows; y++)
+    for(int x = 0; x < grey.cols; x++)
+      dst.at<uchar>(y,x) = 0;  
+  #pragma omp parallel for
+  for(int y = 1; y < grey.rows - 1; y++){
+    for(int x = 1; x < grey.cols - 1; x++){
+      int gx = xGradient(grey, x, y);
+      int gy = yGradient(grey, x, y);
+      int sum = abs(gy)*abs(gy) + abs(gx)*abs(gx);
+      sum = sum > 255 ? 255:sum;
+      sum = sum < 0 ? 0 : sum;
+      dst.at<uchar>(y,x) = sum;
+    }
+  }
+}
+
 // Takes greyscaled picture, thresholds it and puts it dst
 // In the python file, they use 225 for threshold_val and 255 for max_val
 int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
@@ -141,7 +161,6 @@ int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
       }
     }
   }
-  cout << "Done thresholding\n";
 }
 
 // Grayscales and runs sobel operation
@@ -151,7 +170,7 @@ int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
   *  @int erosion_elem -> 0 = rect, 1 = cross, 2 = ellipse
   *  @int erosion_size -> represents size of erosion around anchor point
   */
-void Erosion(Mat src, Mat& dst, int erosion_elem, int erosion_size)
+void Erosion(Mat& src, Mat& dst, int erosion_elem, int erosion_size)
 {
   int erosion_type;
   if( erosion_elem == 0 ){ erosion_type = MORPH_RECT; }
@@ -172,7 +191,7 @@ void Erosion(Mat src, Mat& dst, int erosion_elem, int erosion_size)
   * @int dilation_elem -> 0 = rect, 1 = cross, 2 = ellipse
   * @int dilation_size -> represents size of dilation around anchor point
   */
-void Dilation(Mat src, Mat& dst, int dilation_elem, int dilation_size)
+void Dilation(Mat& src, Mat& dst, int dilation_elem, int dilation_size)
 {
   int dilation_type;
   if( dilation_elem == 0 ){ dilation_type = MORPH_RECT; }
@@ -186,19 +205,152 @@ void Dilation(Mat src, Mat& dst, int dilation_elem, int dilation_size)
   dilate( src, dst, element );
 }
 
-// Grayscales and runs sober operation
+void multByElem(Mat& in1, Mat& in2, Mat& result){
+  #pragma omp for
+  for(int y = 0; y < in1.rows; y++){
+    for(int x = 0; x < in1.cols; x++){
+      result.at<uchar>(y, x) = in1.at<uchar>(y, x) * in2.at<uchar>(y, x);
+    }
+  }
+}
+
+void argMaxX(Mat in, int (&results)[2], int threshold) 
+{
+  results[0] = 0;
+  results[1] = 0;
+  int sums[in.rows];
+  int maxIndex = 0;
+  int secondMaxIndex = 0;
+  #pragma omp for
+  for (int y = 0; y < in.rows; y++)
+    sums[y] = 0;
+  #pragma omp for
+  for (int y = 0; y < in.rows; y++)
+        for (int x = 0; x < in.cols; x++)
+            if (in.at<uchar>(y, x) > threshold) {
+              sums[y] += 1;
+            }
+            // sums[y] += in.at<uchar>(y, x);
+            // sums[y] += 1;
+
+  #pragma omp for
+  for (int z = 0; z < in.rows; z++) {
+    if (abs(z - maxIndex) <= 5 || abs(z - secondMaxIndex) <= 5)
+      continue;
+    if (sums[z] > results[1]) {
+      #pragma omp critical
+      if (sums[z] > results[0]) {
+        results[1] = results[0];
+        results[0] = sums[z];
+        secondMaxIndex = maxIndex;
+        maxIndex = z;
+      } else {
+        results[1] = sums[z];
+        secondMaxIndex = z;
+      }
+    }
+  }
+  results[0] = maxIndex;
+  results[1] = secondMaxIndex;
+}
+
+void argMaxY(Mat in, int (&results)[2], int threshold)
+{
+  results[0] = 0;
+  results[1] = 0;
+  int sums[in.cols];
+  int maxIndex = 0;
+  int secondMaxIndex = 0;
+  #pragma omp for
+  for (int x = 0; x < in.cols; x++)
+    sums[x] = 0;
+  #pragma omp for
+  for (int x = 0; x < in.cols; x++)
+    for (int y = 0; y < in.rows; y++){
+      if (in.at<uchar>(y, x) > threshold) {
+        sums[x] += 1;
+      }
+      // sums[x] += in.at<uchar>(y, x);
+      // cout << (int)in.at<uchar>(y, x) << "\n";
+      // sums[x] += 1;
+    }
+
+  #pragma omp for
+  for (int z = 0; z < in.cols; z++) {
+    if (abs(z - maxIndex) <= 5 || abs(z - secondMaxIndex) <= 5)
+      continue;
+    if (sums[z] > results[1]) {
+      #pragma omp critical
+      if (sums[z] > results[0]) {
+        results[1] = results[0];
+        results[0] = sums[z];
+        secondMaxIndex = maxIndex;
+        maxIndex = z;
+      } else {
+        results[1] = sums[z];
+        secondMaxIndex = z;
+      }
+    }
+  }
+  results[0] = maxIndex;
+  results[1] = secondMaxIndex;
+}
+
+void drawLines(Mat in, Mat &out, int * xCoords, int * yCoords) {
+  #pragma omp for
+  for (int y = 0; y < in.rows; y++) {
+    for (int x = 0; x < in.cols; x++) {
+      if (x == xCoords[0] || x == xCoords[1] || y == yCoords[0] || y == yCoords[1]){
+        // out.at<uchar>(y, x) = 0;
+        out.at<Vec3b>(y, x)[0] = 0;
+        out.at<Vec3b>(y, x)[1] = 0;
+        out.at<Vec3b>(y, x)[2] = 0;
+      // } else {
+        // out.at<uchar>(y, x) = 0;
+      }
+    }
+  }
+}
+
+// Grayscales and runs sobel operation
 int main()
 {
   Mat src, grey, dst, blurred, blurred_again, thresholded, thresholded2, eroded,
       eroded2, dilated, dilated2, edge2;
 
+  Mat sobel1, sobel2, sobel3, sobel4;
+  Mat blur1, blur2, blur3, blur4;
   double start, end;
   start = omp_get_wtime();
 
   if (!grayscale(src, grey, dst)) {
     return -1;
   }
-  sobel(grey, dst);
+
+  blur1 = grey.clone();  
+  blur2 = grey.clone();  
+  blur3 = grey.clone();
+  blur4 = grey.clone();
+  sobel1 = grey.clone();
+  sobel2 = grey.clone();
+  sobel3 = grey.clone();
+  sobel4 = grey.clone();
+  Mat temp = grey.clone();
+
+  blurr_image(grey, blur1, 3, 0);
+  sobel(blur1, temp);
+  threshold(temp, sobel1, 225, 255);\
+
+  blurr_image(blur1, blur2, 3, 3);
+  sobel(blur2, temp);
+  threshold(temp, sobel2, 225, 255);
+
+  blurr_image(sobel2, temp, 3, 6);
+  threshold(temp, sobel2, 150, 255);
+
+  // namedWindow("sobel2");
+  // imshow("sobel2", sobel2);
+
   blurred = dst.clone();
   blurred_again = dst.clone();
   thresholded = dst.clone();
@@ -206,28 +358,49 @@ int main()
   dilated = dst.clone();
   dilated2 = dst.clone();
   eroded = dst.clone();
+  eroded2 = dst.clone();
   edge2 = dst.clone();
 
-  blurr_image (dst, blurred, 4);
-  threshold(blurred, thresholded, 210, 255);
-  blurr_image(thresholded, eroded, 4);
-  threshold(eroded, thresholded2, 150, 255);
-  Dilation(thresholded2, dilated, 0, 10);
+  // blurr_image (sobel2, blurred, 5);
+  // threshold(blurred, thresholded, 210, 255);
+  // blurr_image(thresholded, blurred, 5);
+  // threshold(blurred, thresholded, 210, 255);
+
+  // Erosion(sobel2, temp, 0, 1);
+
+  // namedWindow("eroded");
+  // imshow("eroded", temp);
+
+  Dilation(sobel2, dilated, 0, 10);
   Dilation(dilated, dilated2, 0, 10);
-  // For debugging purposes, can get rid of this once we're done with it
+  // Dilation(dilated2, dilated, 0, 10);
+  // Dilation(dilated, dilated2, 0, 1);
+
+  // namedWindow("dilated");
+  // imshow("dilated", dilated2);
+
+  sobel_add(dilated2, temp);
+  blurr_image(temp, dst, 5, 9);
+
   // namedWindow("sobel");
   // imshow("sobel", dst);
-  // namedWindow("blurred");
-  // imshow("blurred", blurred);
-  namedWindow("thresholded2");
-  imshow("thresholded2", thresholded2);
-  namedWindow("dilated");
-  imshow("dilated", dilated);
-  // namedWindow("grayscale");
-  // imshow("grayscale", grey);
-  namedWindow("Original");
+
+  int vertical[2];
+  int horizontal[2];
+
+  argMaxX(dst, horizontal, 100);
+  argMaxY(dst, vertical, 100);
   imshow("Original", src);
   end = omp_get_wtime();
+
+  cout << vertical[0] << " " << vertical[1] << endl;
+  cout << horizontal[0] << " " << horizontal[1] << endl;
+  temp = src.clone();
+  drawLines(dst, temp, vertical, horizontal);
+  namedWindow("final");
+  imshow("final", temp);
+
+  namedWindow("Original");
   cout<<"time is: "<<(end-start)<< " seconds" <<endl;
   waitKey();
   return 0;
