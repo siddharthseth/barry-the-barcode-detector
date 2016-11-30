@@ -3,8 +3,7 @@
 #include <cmath>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
-#include <vector>
-#include <numeric>
+#include <sstream>
 using namespace std;
 using namespace cv;
 
@@ -89,11 +88,6 @@ int blurr_image (Mat &image, Mat &dst, int filter_size, int margin)
 
 // 1 for success, 0 for fail
 int grayscale(Mat &src, Mat &grey, Mat &dst) {
-  double start, end;
-  start = omp_get_wtime();
-  int gx, gy, sum;
-  // TODO: replace this so it reads the specific image rather than a hardcoded one
-  src= imread("example.png");  
   cvtColor(src,grey,CV_BGR2GRAY);
   dst = grey.clone();
   if( !grey.data )
@@ -312,34 +306,24 @@ void drawLines(Mat in, Mat &out, int * xCoords, int * yCoords) {
   }
 }
 
-// Grayscales and runs sobel operation
-int main()
-{
-  Mat src, grey, dst, blurred, blurred_again, thresholded, thresholded2, eroded,
-      eroded2, dilated, dilated2, edge2;
+void rotateMatrix(Mat src, Mat &dst, int degree){
+  Point2f pc(src.cols/2., src.rows/2.);
+  Mat r = getRotationMatrix2D(pc, degree, 1.0);
+  warpAffine(src, dst, r, src.size());
+}
 
-  Mat sobel1, sobel2, sobel3, sobel4;
-  Mat blur1, blur2, blur3, blur4;
-  double start, end;
-  start = omp_get_wtime();
-
-  if (!grayscale(src, grey, dst)) {
-    return -1;
-  }
-
-  blur1 = grey.clone();  
-  blur2 = grey.clone();  
-  blur3 = grey.clone();
-  blur4 = grey.clone();
-  sobel1 = grey.clone();
-  sobel2 = grey.clone();
-  sobel3 = grey.clone();
-  sobel4 = grey.clone();
+Mat runAlgo(Mat src, Mat grey, Mat dst){
+  Mat blur1 = grey.clone(); 
+  Mat blur2 = grey.clone(); 
+  Mat sobel1 = grey.clone();
+  Mat sobel2 = grey.clone();
   Mat temp = grey.clone();
+  Mat dilated = grey.clone();
+  Mat dilated2 = grey.clone();
 
   blurr_image(grey, blur1, 3, 0);
   sobel(blur1, temp);
-  threshold(temp, sobel1, 225, 255);\
+  threshold(temp, sobel1, 225, 255);
 
   blurr_image(blur1, blur2, 3, 3);
   sobel(blur2, temp);
@@ -348,60 +332,74 @@ int main()
   blurr_image(sobel2, temp, 3, 6);
   threshold(temp, sobel2, 150, 255);
 
-  // namedWindow("sobel2");
-  // imshow("sobel2", sobel2);
-
-  blurred = dst.clone();
-  blurred_again = dst.clone();
-  thresholded = dst.clone();
-  thresholded2 = dst.clone();
-  dilated = dst.clone();
-  dilated2 = dst.clone();
-  eroded = dst.clone();
-  eroded2 = dst.clone();
-  edge2 = dst.clone();
-
-  // blurr_image (sobel2, blurred, 5);
-  // threshold(blurred, thresholded, 210, 255);
-  // blurr_image(thresholded, blurred, 5);
-  // threshold(blurred, thresholded, 210, 255);
-
-  // Erosion(sobel2, temp, 0, 1);
-
-  // namedWindow("eroded");
-  // imshow("eroded", temp);
-
   Dilation(sobel2, dilated, 0, 10);
   Dilation(dilated, dilated2, 0, 10);
-  // Dilation(dilated2, dilated, 0, 10);
-  // Dilation(dilated, dilated2, 0, 1);
-
-  // namedWindow("dilated");
-  // imshow("dilated", dilated2);
 
   sobel_add(dilated2, temp);
   blurr_image(temp, dst, 5, 9);
 
-  // namedWindow("sobel");
-  // imshow("sobel", dst);
-
-  int vertical[2];
   int horizontal[2];
+  int vertical[2];
 
   argMaxX(dst, horizontal, 100);
   argMaxY(dst, vertical, 100);
-  imshow("Original", src);
-  end = omp_get_wtime();
 
-  cout << vertical[0] << " " << vertical[1] << endl;
-  cout << horizontal[0] << " " << horizontal[1] << endl;
   temp = src.clone();
   drawLines(dst, temp, vertical, horizontal);
-  namedWindow("final");
-  imshow("final", temp);
+  return temp;
+}
+
+// Grayscales and runs sobel operation
+int main(int argc, char** argv)
+{
+  if(argc != 2){
+    cout << "Requires 1 input: of 'filename', invalid input given. Given " << argc-1 << " input(s)." << endl;
+    return -1;
+  }
+
+  Mat src, grey, dst;
+  src= imread(argv[1]);  
+
+  double start, end;
+  start = omp_get_wtime();
 
   namedWindow("Original");
-  cout<<"time is: "<<(end-start)<< " seconds" <<endl;
+  imshow("Original", src);
+
+  if(!grayscale(src, grey, dst)){
+    return -1;
+  }
+  Mat final = runAlgo(src, grey, dst);
+
+  /*
+  #pragma omp for
+  for(int i = 0; i <= 90; i += 10){
+    Mat rotated = src.clone();
+    if(i != 0) rotateMatrix(src, rotated, i);
+
+    if (!grayscale(rotated, grey, dst)) continue;
+
+    rotated = runAlgo(rotated, grey, dst);
+    ostringstream os;
+    os << i;
+    string name = "Rotation by: " + os.str();
+    namedWindow(name);
+    imshow(name, rotated);
+  }*/
+  
+  end = omp_get_wtime();
+  cout<<"time to run 1 algo is: "<<(end-start)<< " seconds" <<endl;
+
+  namedWindow("Output");
+  imshow("Output", final);
+
+  start = omp_get_wtime();
+  Mat rotated = src.clone();
+  rotateMatrix(src, rotated, 45);
+  end = omp_get_wtime();
+  cout<<"time to rotate once with opencv is: " << (end-start)<<" seconds"<<endl;
+
+
   waitKey();
   return 0;
 }
