@@ -93,7 +93,7 @@ int grayscale(Mat &src, Mat &grey, Mat &dst) {
   start = omp_get_wtime();
   int gx, gy, sum;
   // TODO: replace this so it reads the specific image rather than a hardcoded one
-  src= imread("example.png");  
+  src= imread("example4.png");  
   cvtColor(src,grey,CV_BGR2GRAY);
   dst = grey.clone();
   if( !grey.data )
@@ -233,28 +233,43 @@ void argMaxX(Mat in, int (&results)[2], int threshold)
             // sums[y] += in.at<uchar>(y, x);
             // sums[y] += 1;
 
-  #pragma omp for
+  // #pragma omp for
+  // for (int z = 0; z < in.rows; z++) {
+  //   if (abs(z - maxIndex) <= 15 || abs(z - secondMaxIndex) <= 15)
+  //     continue;
+  //   if (sums[z] > results[1]) {
+  //     #pragma omp critical
+  //     if (sums[z] > results[0]) {
+  //       results[1] = results[0];
+  //       results[0] = sums[z];
+  //       secondMaxIndex = maxIndex;
+  //       maxIndex = z;
+  //     } else {
+  //       results[1] = sums[z];
+  //       secondMaxIndex = z;
+  //     }
+  //   }
+  // }
   for (int z = 0; z < in.rows; z++) {
-    if (abs(z - maxIndex) <= 5 || abs(z - secondMaxIndex) <= 5)
+    if (sums[z] > results[0]) {
+      maxIndex = z; 
+      results[0] = sums[z];
+    }
+  }
+  for (int z = 0; z < in.rows; z++) {
+    if (abs(z - maxIndex) <= 15) {
       continue;
+    }
     if (sums[z] > results[1]) {
-      #pragma omp critical
-      if (sums[z] > results[0]) {
-        results[1] = results[0];
-        results[0] = sums[z];
-        secondMaxIndex = maxIndex;
-        maxIndex = z;
-      } else {
-        results[1] = sums[z];
-        secondMaxIndex = z;
-      }
+      secondMaxIndex = z;
+      results[1] = sums[z];
     }
   }
   results[0] = maxIndex;
   results[1] = secondMaxIndex;
 }
 
-void argMaxY(Mat in, int (&results)[2], int threshold)
+void argMaxY(Mat in, int (&results)[2], int threshold, int minx, int maxx)
 {
   results[0] = 0;
   results[1] = 0;
@@ -266,7 +281,7 @@ void argMaxY(Mat in, int (&results)[2], int threshold)
     sums[x] = 0;
   #pragma omp for
   for (int x = 0; x < in.cols; x++)
-    for (int y = 0; y < in.rows; y++){
+    for (int y = minx; y < maxx; y++){
       if (in.at<uchar>(y, x) > threshold) {
         sums[x] += 1;
       }
@@ -275,21 +290,37 @@ void argMaxY(Mat in, int (&results)[2], int threshold)
       // sums[x] += 1;
     }
 
-  #pragma omp for
+  // #pragma omp for
+  // for (int z = 0; z < in.cols; z++) {
+  //   if (abs(z - maxIndex) <= 5 || abs(z - secondMaxIndex) <= 5)
+  //     continue;
+  //   if (sums[z] > results[1]) {
+  //     #pragma omp critical
+  //     if (sums[z] > results[0]) {
+  //       results[1] = results[0];
+  //       results[0] = sums[z];
+  //       secondMaxIndex = maxIndex;
+  //       maxIndex = z;
+  //     } else {
+  //       results[1] = sums[z];
+  //       secondMaxIndex = z;
+  //     }
+  //   }
+  // }
+
   for (int z = 0; z < in.cols; z++) {
-    if (abs(z - maxIndex) <= 5 || abs(z - secondMaxIndex) <= 5)
+    if (sums[z] > results[0]) {
+      maxIndex = z; 
+      results[0] = sums[z];
+    }
+  }
+  for (int z = 0; z < in.cols; z++) {
+    if (abs(z - maxIndex) <= 50) {
       continue;
+    }
     if (sums[z] > results[1]) {
-      #pragma omp critical
-      if (sums[z] > results[0]) {
-        results[1] = results[0];
-        results[0] = sums[z];
-        secondMaxIndex = maxIndex;
-        maxIndex = z;
-      } else {
-        results[1] = sums[z];
-        secondMaxIndex = z;
-      }
+      secondMaxIndex = z;
+      results[1] = sums[z];
     }
   }
   results[0] = maxIndex;
@@ -301,12 +332,12 @@ void drawLines(Mat in, Mat &out, int * xCoords, int * yCoords) {
   for (int y = 0; y < in.rows; y++) {
     for (int x = 0; x < in.cols; x++) {
       if (x == xCoords[0] || x == xCoords[1] || y == yCoords[0] || y == yCoords[1]){
-        // out.at<uchar>(y, x) = 0;
+        // out.at<uchar>(y, x) = 255;
         out.at<Vec3b>(y, x)[0] = 0;
         out.at<Vec3b>(y, x)[1] = 0;
-        out.at<Vec3b>(y, x)[2] = 0;
+        out.at<Vec3b>(y, x)[2] = 255;
       // } else {
-        // out.at<uchar>(y, x) = 0;
+      //   out.at<uchar>(y, x) = 0;
       }
     }
   }
@@ -315,13 +346,13 @@ void drawLines(Mat in, Mat &out, int * xCoords, int * yCoords) {
 // Grayscales and runs sobel operation
 int main()
 {
+  // setUseOptimized(false);
   Mat src, grey, dst, blurred, blurred_again, thresholded, thresholded2, eroded,
       eroded2, dilated, dilated2, edge2;
 
   Mat sobel1, sobel2, sobel3, sobel4;
   Mat blur1, blur2, blur3, blur4;
   double start, end;
-  start = omp_get_wtime();
 
   if (!grayscale(src, grey, dst)) {
     return -1;
@@ -336,17 +367,21 @@ int main()
   sobel3 = grey.clone();
   sobel4 = grey.clone();
   Mat temp = grey.clone();
+  start = omp_get_wtime();
 
   blurr_image(grey, blur1, 3, 0);
   sobel(blur1, temp);
   threshold(temp, sobel1, 225, 255);\
 
-  blurr_image(blur1, blur2, 3, 3);
+  blurr_image(sobel1, blur2, 3, 3);
   sobel(blur2, temp);
   threshold(temp, sobel2, 225, 255);
 
   blurr_image(sobel2, temp, 3, 6);
   threshold(temp, sobel2, 150, 255);
+  namedWindow("threshold");
+  imshow("threshold", sobel2);
+  imwrite("figures/figure1.jpg", sobel2);
 
   // namedWindow("sobel2");
   // imshow("sobel2", sobel2);
@@ -366,21 +401,25 @@ int main()
   // blurr_image(thresholded, blurred, 5);
   // threshold(blurred, thresholded, 210, 255);
 
-  // Erosion(sobel2, temp, 0, 1);
+  Erosion(sobel2, temp, 0, 1);
 
   // namedWindow("eroded");
   // imshow("eroded", temp);
 
-  Dilation(sobel2, dilated, 0, 10);
-  Dilation(dilated, dilated2, 0, 10);
+  Dilation(temp, dilated, 0, 10);
+  // Dilation(dilated, dilated2, 0, 10);
   // Dilation(dilated2, dilated, 0, 10);
   // Dilation(dilated, dilated2, 0, 1);
 
-  // namedWindow("dilated");
-  // imshow("dilated", dilated2);
+  namedWindow("dilated");
+  imshow("dilated", dilated);
+  imwrite("figures/figure2.jpg", dilated);
 
-  sobel_add(dilated2, temp);
+  sobel_add(dilated, temp);
   blurr_image(temp, dst, 5, 9);
+  namedWindow("outline");
+  imshow("outline", dst);
+  imwrite("figures/figure3.jpg", dst);
 
   // namedWindow("sobel");
   // imshow("sobel", dst);
@@ -389,7 +428,10 @@ int main()
   int horizontal[2];
 
   argMaxX(dst, horizontal, 100);
-  argMaxY(dst, vertical, 100);
+  if (horizontal[0] < horizontal[1])
+    argMaxY(dst, vertical, 100, horizontal[0], horizontal[1]);
+  else
+    argMaxY(dst, vertical, 100, horizontal[1], horizontal[0]);
   imshow("Original", src);
   end = omp_get_wtime();
 
@@ -399,6 +441,7 @@ int main()
   drawLines(dst, temp, vertical, horizontal);
   namedWindow("final");
   imshow("final", temp);
+  imwrite("figures/figure4.jpg", temp);
 
   namedWindow("Original");
   cout<<"time is: "<<(end-start)<< " seconds" <<endl;

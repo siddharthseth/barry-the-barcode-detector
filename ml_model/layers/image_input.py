@@ -6,7 +6,7 @@ import scipy.io as sio
 class ImageInput(caffe.Layer):
 
     def setup(self, bottom, top):
-        top[0].reshape(1, 3, 640, 480)
+        top[0].reshape(1, 3, 120, 160)
         top[1].reshape(1, 30, 40)
         return
 
