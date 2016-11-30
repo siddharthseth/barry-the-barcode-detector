@@ -68,9 +68,24 @@ int blurr (Mat image, int x, int y, int filter_size, float standard_deviation)
     }
     return int(sum);
 }
-
-int blurr_image (Mat &image, Mat &dst, int filter_size, int margin)
+int boxBlurrSingle (Mat image, int x, int y, int filter_size, float standard_deviation)
 {
+    float sum = 0.f;
+    int i, j;
+    float div = 1.0f / ((2.0f*filter_size + 1.0f)*(2.0f*filter_size + 1.0f));
+    for (i = -filter_size; i <= filter_size; i++) {
+        for (j = -filter_size; j <= filter_size; j++) {
+          sum += div * image.at<uchar>(y+j, x+i);
+        }
+    }
+    return int(sum);
+}
+
+int box_blurr_image (Mat &image, Mat &dst, int filter_size, int margin, int rep)
+{
+    if (rep == 0){
+        return 0;
+    }
     #pragma omp parallel for
     for (int y = 0; y < dst.rows; y++)
         for (int x = 0; x < dst.cols; x++)
@@ -79,7 +94,29 @@ int blurr_image (Mat &image, Mat &dst, int filter_size, int margin)
     for (int y = filter_size + margin; y < image.rows - filter_size - margin; y++) 
         for (int x = filter_size + margin; x < image.cols - filter_size - margin; x++)
         {
+            //int blurred = blurr (image, x, y, filter_size, 1.0f);
+            int blurred = boxBlurrSingle (image, x, y, filter_size, 1.0f);
+            //int blurred = blurr_filter_3 (image, x, y, 1.0f);
+            blurred = blurred > 255 ? 255 : blurred;
+            blurred = blurred < 0 ? 0 : blurred;
+            dst.at<uchar>(y, x) = blurred;
+        }
+    box_blurr_image(dst,image,filter_size, margin, rep-1);
+}
+
+int blurr_image (Mat &image, Mat &dst, int filter_size, int margin)
+{
+    #pragma omp parallel for
+    for (int y = 0; y < dst.rows; y++)
+       for (int x = 0; x < dst.cols; x++)
+            dst.at<uchar>(y, x) = 0;
+    #pragma omp parallel for
+    for (int y = filter_size + margin; y < image.rows - filter_size - margin; y++) 
+        for (int x = filter_size + margin; x < image.cols - filter_size - margin; x++)
+        {
             int blurred = blurr (image, x, y, filter_size, 1.0f);
+            //int blurred = boxBlurrSingle (image, x, y, filter_size, 1.0f);
+            //int blurred = blurr_filter_3 (image, x, y, 1.0f);
             blurred = blurred > 255 ? 255 : blurred;
             blurred = blurred < 0 ? 0 : blurred;
             dst.at<uchar>(y, x) = blurred;
@@ -259,7 +296,7 @@ void argMaxY(Mat in, int (&results)[2], int threshold)
   for (int x = 0; x < in.cols; x++)
     sums[x] = 0;
   #pragma omp for
-  for (int x = 0; x < in.cols; x++)
+  for (int x = 0+30; x < in.cols-30; x++)
     for (int y = 0; y < in.rows; y++){
       if (in.at<uchar>(y, x) > threshold) {
         sums[x] += 1;
@@ -312,6 +349,53 @@ void rotateMatrix(Mat src, Mat &dst, int degree){
   warpAffine(src, dst, r, src.size());
 }
 
+Mat runAlgo2(Mat src, Mat grey, Mat dst){
+  Mat blur1 = grey.clone(); 
+  Mat blur2 = grey.clone(); 
+  Mat sobel1 = grey.clone();
+  Mat sobel2 = grey.clone();
+  Mat temp = grey.clone();
+  Mat dilated = grey.clone();
+  Mat dilated2 = grey.clone();
+  Mat a = grey.clone();
+  Mat b = grey.clone();
+  Mat c = grey.clone();
+
+  blurr_image(grey, a, 3, 0);
+  blurr_image(a, grey, 3, 0);
+  blurr_image(grey, a, 3, 0);
+  //sobel(a, b);
+  //threshold(b, c, 225, 255);
+
+  blurr_image(a, blur2, 3, 3);
+  blurr_image(blur2,a, 3, 3);
+  blurr_image(a, blur2, 3, 3);
+  sobel(blur2, b);
+  threshold(b, sobel2, 225, 255);
+
+  blurr_image(sobel2, b, 3, 6);
+  blurr_image(b, sobel2, 3, 6);
+  blurr_image(sobel2, b, 3, 6);
+  threshold(b, sobel2, 150, 255);
+
+  Dilation(sobel2, dilated, 0, 10);
+  Dilation(dilated, dilated2, 0, 10);
+
+  sobel_add(dilated2, b);
+  blurr_image(b, dst, 5, 9);
+  blurr_image(dst, b, 5, 9);
+  blurr_image(b, dst, 5, 9);
+
+  int horizontal[2];
+  int vertical[2];
+
+  argMaxX(dst, horizontal, 100);
+  argMaxY(dst, vertical, 100);
+
+  b = src.clone();
+  drawLines(dst, b, vertical, horizontal);
+  return b;
+}
 Mat runAlgo(Mat src, Mat grey, Mat dst){
   Mat blur1 = grey.clone(); 
   Mat blur2 = grey.clone(); 
@@ -321,22 +405,37 @@ Mat runAlgo(Mat src, Mat grey, Mat dst){
   Mat dilated = grey.clone();
   Mat dilated2 = grey.clone();
 
-  blurr_image(grey, blur1, 3, 0);
-  sobel(blur1, temp);
-  threshold(temp, sobel1, 225, 255);
+  //blurr_image(grey, blur1, 3, 0);
+  //namedWindow("Blurred");
+  //imshow("Blurred", blur1);
+  box_blurr_image(grey, blur1, 1, 0,1);
+  //namedWindow("BoxBlurred");
+  //imshow("BoxBlurred", blur1);
+  //double start, end;
+  //start = omp_get_wtime();
+  //sobel(blur1, temp);
+  //threshold(temp, sobel1, 225, 255);
+  //end = omp_get_wtime();
+  //cout<<"speedup is: "<<(end-start)<< " seconds" <<endl;
 
-  blurr_image(blur1, blur2, 3, 3);
+  box_blurr_image(blur1, blur2, 1, 3, 1);
   sobel(blur2, temp);
   threshold(temp, sobel2, 225, 255);
 
-  blurr_image(sobel2, temp, 3, 6);
-  threshold(temp, sobel2, 150, 255);
+  //box_blurr_image(sobel2, temp, 1, 6, 1);
+  //threshold(temp, sobel2, 150, 255);
+  //namedWindow("sobel2");
+  //imshow("sobel2", sobel2);
 
   Dilation(sobel2, dilated, 0, 10);
   Dilation(dilated, dilated2, 0, 10);
+  //namedWindow("dil2");
+  //imshow("dil2", dilated2);
+
 
   sobel_add(dilated2, temp);
   blurr_image(temp, dst, 5, 9);
+  //box_blurr_image(temp,dst,3,9,1);
 
   int horizontal[2];
   int vertical[2];
