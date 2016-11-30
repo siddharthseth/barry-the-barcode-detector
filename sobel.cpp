@@ -352,9 +352,12 @@ Mat runAlgo(Mat src, Mat grey, Mat dst){
 // Grayscales and runs sobel operation
 int main(int argc, char** argv)
 {
-  if(argc != 2){
+  if(argc < 2){
     cout << "Requires 1 input: of 'filename', invalid input given. Given " << argc-1 << " input(s)." << endl;
     return -1;
+  }
+  if(argc == 3){
+      omp_set_num_threads(atoi(argv[2]));
   }
 
   Mat src, grey, dst;
