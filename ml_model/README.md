@@ -1,4 +1,4 @@
-# ML model
+# Learned Model
 
 Model prototxt in nets directory.
 
