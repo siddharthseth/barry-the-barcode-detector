@@ -86,11 +86,11 @@ int box_blurr_image (Mat &image, Mat &dst, int filter_size, int margin, int rep)
     if (rep == 0){
         return 0;
     }
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int y = 0; y < dst.rows; y++)
         for (int x = 0; x < dst.cols; x++)
             dst.at<uchar>(y, x) = 0;
-    #pragma omp parallel for schedule(dynamic, 10)
+    #pragma omp parallel for
     for (int y = filter_size + margin; y < image.rows - filter_size - margin; y++) 
         for (int x = filter_size + margin; x < image.cols - filter_size - margin; x++)
         {
@@ -106,11 +106,11 @@ int box_blurr_image (Mat &image, Mat &dst, int filter_size, int margin, int rep)
 
 int blurr_image (Mat &image, Mat &dst, int filter_size, int margin)
 {
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int y = 0; y < dst.rows; y++)
        for (int x = 0; x < dst.cols; x++)
             dst.at<uchar>(y, x) = 0;
-    //#pragma omp parallel for
+    #pragma omp parallel for
     for (int y = filter_size + margin; y < image.rows - filter_size - margin; y++) 
         for (int x = filter_size + margin; x < image.cols - filter_size - margin; x++)
         {
@@ -139,11 +139,11 @@ int grayscale(Mat &src, Mat &grey, Mat &dst) {
  *  to DST.
  **/
 int sobel(Mat &grey, Mat &dst) {
-  //#pragma omp parallel for  
+  #pragma omp parallel for
   for(int y = 0; y < grey.rows; y++)
     for(int x = 0; x < grey.cols; x++)
       dst.at<uchar>(y,x) = 0;  
-  //#pragma omp parallel for
+  #pragma omp parallel for
   for(int y = 1; y < grey.rows - 1; y++){
     for(int x = 1; x < grey.cols - 1; x++){
       int gx = xGradient(grey, x, y);
@@ -157,11 +157,11 @@ int sobel(Mat &grey, Mat &dst) {
 }
 
 int sobel_add(Mat &grey, Mat &dst) {
-  //#pragma omp parallel for  
+  #pragma omp parallel for
   for(int y = 0; y < grey.rows; y++)
     for(int x = 0; x < grey.cols; x++)
       dst.at<uchar>(y,x) = 0;  
-  //#pragma omp parallel for
+  #pragma omp parallel for
   for(int y = 1; y < grey.rows - 1; y++){
     for(int x = 1; x < grey.cols - 1; x++){
       int gx = xGradient(grey, x, y);
@@ -177,11 +177,11 @@ int sobel_add(Mat &grey, Mat &dst) {
 // Takes greyscaled picture, thresholds it and puts it dst
 // In the python file, they use 225 for threshold_val and 255 for max_val
 int threshold(Mat grey, Mat &dst, int threshold_val, int max_val) {
-  //#pragma omp parallel for  
+  #pragma omp parallel for
   for(int y = 0; y < grey.rows; y++)
     for(int x = 0; x < grey.cols; x++)
       dst.at<uchar>(y,x) = 0;  
-  //#pragma omp parallel for
+  #pragma omp parallel for
   for (int y = 0; y < grey.rows-1; y++) {
     for (int x = 0; x < grey.cols-1; x++) {
       // cout << "Thresholding at: " << x << ", " << y << "\n";
@@ -237,7 +237,7 @@ void Dilation(Mat& src, Mat& dst, int dilation_elem, int dilation_size)
 }
 
 void multByElem(Mat& in1, Mat& in2, Mat& result){
-  //#pragma omp parallel for
+  #pragma omp parallel for
   for(int y = 0; y < in1.rows; y++){
     for(int x = 0; x < in1.cols; x++){
       result.at<uchar>(y, x) = in1.at<uchar>(y, x) * in2.at<uchar>(y, x);
@@ -261,8 +261,6 @@ void argMaxX(Mat in, int (&results)[2], int threshold)
             if (in.at<uchar>(y, x) > threshold) {
               sums[y] += 1;
             }
-            // sums[y] += in.at<uchar>(y, x);
-            // sums[y] += 1;
 
   for (int z = 0; z < in.rows; z++) {
     if (sums[z] > results[0]) {
@@ -284,7 +282,7 @@ void argMaxX(Mat in, int (&results)[2], int threshold)
   results[1] = secondMaxIndex;
 }
 
-void argMaxY(Mat in, int (&results)[2], int threshold)
+void argMaxY(Mat in, int (&results)[2], int threshold, int minx, int maxx)
 {
   results[0] = 0;
   results[1] = 0;
@@ -296,7 +294,7 @@ void argMaxY(Mat in, int (&results)[2], int threshold)
     sums[x] = 0;
   //#pragma omp parallel for
   for (int x = 0+30; x < in.cols-30; x++)
-    for (int y = 0; y < in.rows; y++){
+    for (int y = minx; y < maxx; y++){
       if (in.at<uchar>(y, x) > threshold) {
         sums[x] += 1;
       }
@@ -327,16 +325,16 @@ void argMaxY(Mat in, int (&results)[2], int threshold)
 }
 
 void drawLines(Mat in, Mat &out, int * xCoords, int * yCoords) {
-  //#pragma omp parallel for
+  #pragma omp parallel for
   for (int y = 0; y < in.rows; y++) {
     for (int x = 0; x < in.cols; x++) {
       if (x == xCoords[0] || x == xCoords[1] || y == yCoords[0] || y == yCoords[1]){
-        // out.at<uchar>(y, x) = 0;
+        // out.at<uchar>(y, x) = 255;
         out.at<Vec3b>(y, x)[0] = 0;
         out.at<Vec3b>(y, x)[1] = 0;
         out.at<Vec3b>(y, x)[2] = 255;
       // } else {
-        // out.at<uchar>(y, x) = 0;
+      //   out.at<uchar>(y, x) = 0;
       }
     }
   }
@@ -354,6 +352,7 @@ Mat runAlgo2(Mat src, Mat grey, Mat dst){
   Mat sobel1 = grey.clone();
   Mat sobel2 = grey.clone();
   Mat temp = grey.clone();
+
   Mat dilated = grey.clone();
   Mat dilated2 = grey.clone();
   Mat a = grey.clone();
@@ -389,7 +388,10 @@ Mat runAlgo2(Mat src, Mat grey, Mat dst){
   int vertical[2];
 
   argMaxX(dst, horizontal, 100);
-  argMaxY(dst, vertical, 100);
+  if (horizontal[0] < horizontal[1])
+    argMaxY(dst, vertical, 100, horizontal[0], horizontal[1]);
+  else
+    argMaxY(dst, vertical, 100, horizontal[1], horizontal[0]);
 
   b = src.clone();
   drawLines(dst, b, vertical, horizontal);
@@ -421,7 +423,12 @@ Mat runAlgo(Mat src, Mat grey, Mat dst){
   int vertical[2];
 
   argMaxX(dst, horizontal, 100);
-  argMaxY(dst, vertical, 100);
+  if (horizontal[0] < horizontal[1])
+    argMaxY(dst, vertical, 100, horizontal[0], horizontal[1]);
+  else
+    argMaxY(dst, vertical, 100, horizontal[1], horizontal[0]);
+  imshow("Original", src);
+  int end = omp_get_wtime();
 
   temp = src.clone();
   drawLines(dst, temp, vertical, horizontal);
@@ -453,7 +460,6 @@ int main(int argc, char** argv)
     return -1;
   }
   Mat final = runAlgo(src, grey, dst);
-
   
   // for(int i = 0; i <= 90; i += 10){
   //   Mat rotated = src.clone();
