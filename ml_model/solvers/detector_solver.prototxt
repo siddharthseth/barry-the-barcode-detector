@@ -1,0 +1,19 @@
+net: "barry/edge_detector.prototxt"
+test_state: { stage: 'test-on-train' }
+test_iter: 500
+test_state: { stage: 'test-on-test' }
+test_iter: 100
+test_interval: 500
+test_compute_loss: true
+base_lr: 0.001
+momentum: 0.9
+momentum2: 0.999
+lr_policy: "fixed"
+display: 100
+max_iter: 65000
+# weight_decay: 0.0005
+snapshot: 2000
+snapshot_prefix: "barry/detector_adagrad_train"
+# solver mode: CPU or GPU
+solver_mode: GPU
+type: "Adam"
